@@ -1,16 +1,28 @@
-# This is a sample Python script.
-
-# Press Shift+F10 to execute it or replace it with your code.
-# Press Double Shift to search everywhere for classes, files, tool windows, actions, and settings.
-
-
-def print_hi(name):
-    # Use a breakpoint in the code line below to debug your script.
-    print(f'Hi, {name}')  # Press Ctrl+F8 to toggle the breakpoint.
+import sc2
+from sc2 import run_game, maps, Race, Difficulty
+from sc2.player import Bot, Computer
+from sc2.constants import NEXUS, PROBE, PYLON
 
 
-# Press the green button in the gutter to run the script.
-if __name__ == '__main__':
-    print_hi('PyCharm')
+class AndruBot(sc2.BotAI):
+    async def on_step(self, iteration):
+        await self.distribute_workers()
+        await self.build_workers()
+        await self.build_pylons()
 
-# See PyCharm help at https://www.jetbrains.com/help/pycharm/
+    async def build_workers(self):
+        for nexus in self.units(NEXUS).ready:
+            if self.can_afford(PROBE) and nexus.noqueue:
+                await self.do(nexus.train(PROBE))
+
+    async def build_pylons(self):
+        if self.supply_left < 5 and not self.already_pending(PYLON):
+            nexuses = self.units(NEXUS).ready
+            if nexuses.exists:
+                if self.can_afford(PYLON):
+                    await self.build(PYLON, near=nexuses.first)
+
+run_game(maps.get("AbyssalReefLE"), [
+    Bot(Race.Protoss, AndruBot()),
+    Computer(Race.Terran, Difficulty.Easy)
+], realtime=True)
