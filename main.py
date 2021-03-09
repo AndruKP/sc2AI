@@ -105,5 +105,5 @@ class AndruBot(sc2.BotAI):
 
 run_game(maps.get("AbyssalReefLE"), [
     Bot(Race.Protoss, AndruBot()),
-    Computer(Race.Terran, Difficulty.Easy)
+    Computer(Race.Terran, Difficulty.Hard)
 ], realtime=False)
