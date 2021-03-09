@@ -1,4 +1,6 @@
 import random
+import cv2
+import numpy as np
 
 import sc2
 from sc2 import run_game, maps, Race, Difficulty
@@ -20,7 +22,19 @@ class AndruBot(sc2.BotAI):
         await self.expand()
         await self.offensive_force_buildings()
         await self.build_offensive_force()
+        await self.intel()
         await self.attack()
+
+    async def intel(self):
+        game_data = np.zeros((self.game_info.map_size[1], self.game_info.map_size[0], 3), np.uint8)
+        for nexus in self.units(NEXUS):
+            nex_pos = nexus.position
+            cv2.circle(game_data, (int(nex_pos[0]), int(nex_pos[1])), 10, (0, 255, 0))
+
+        flipped = cv2.flip(game_data, 0)
+        resized = cv2.resize(flipped, dsize=None, fx=2, fy=2)
+        cv2.imshow('Intel', resized)
+        cv2.waitKey(1)
 
     async def build_workers(self):
         if self.units(NEXUS).amount * 22 > self.units(PROBE).amount:
@@ -60,21 +74,16 @@ class AndruBot(sc2.BotAI):
                 if self.can_afford(CYBERNETICSCORE) and not self.already_pending(CYBERNETICSCORE):
                     await self.build(CYBERNETICSCORE, near=pylon)
 
-            elif self.units(GATEWAY).amount < self.time / 60:
+            elif self.units(GATEWAY).amount < 1:
                 if self.can_afford(GATEWAY) and not self.already_pending(GATEWAY):
                     await self.build(GATEWAY, near=pylon)
 
             if self.units(CYBERNETICSCORE).ready.exists:
-                if self.units(STARGATE).amount < self.time / 120:
+                if self.units(STARGATE).amount < self.time / 75:
                     if self.can_afford(STARGATE) and not self.already_pending(STARGATE):
                         await self.build(STARGATE, near=pylon)
 
     async def build_offensive_force(self):
-        for gw in self.units(GATEWAY).ready.noqueue:
-            if not self.units(STALKER).amount > self.units(VOIDRAY).amount:
-                if self.can_afford(STALKER) and self.supply_left >= 2:
-                    await self.do(gw.train(STALKER))
-
         for sg in self.units(STARGATE).ready.noqueue:
             if self.can_afford(VOIDRAY) and self.supply_left >= 4:
                 await self.do(sg.train(VOIDRAY))
@@ -89,11 +98,11 @@ class AndruBot(sc2.BotAI):
 
     async def attack(self):
         # {UNIT: [n_to_attack, n_to_defend]}
-        aggressive_units = {STALKER: [15, 4],
-                            VOIDRAY: [8, 3]}
+        aggressive_units = {VOIDRAY: [8, 3]}
 
         for UNIT in aggressive_units:
-            if self.units(UNIT).amount > aggressive_units[UNIT][0] and self.units(UNIT).amount > aggressive_units[UNIT][1]:
+            if self.units(UNIT).amount > aggressive_units[UNIT][0] and self.units(UNIT).amount > aggressive_units[UNIT][
+                1]:
                 for s in self.units(UNIT).idle:
                     await self.do(s.attack(self.find_target(self.state)))
 
@@ -103,7 +112,7 @@ class AndruBot(sc2.BotAI):
                         await self.do(s.attack(random.choice(self.known_enemy_units)))
 
 
-run_game(maps.get("AbyssalReefLE"), [
+run_game(maps.get("HonorgroundsLE"), [
     Bot(Race.Protoss, AndruBot()),
     Computer(Race.Terran, Difficulty.Easy)
 ], realtime=False)
