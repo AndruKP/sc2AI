@@ -27,9 +27,22 @@ class AndruBot(sc2.BotAI):
 
     async def intel(self):
         game_data = np.zeros((self.game_info.map_size[1], self.game_info.map_size[0], 3), np.uint8)
-        for nexus in self.units(NEXUS):
-            nex_pos = nexus.position
-            cv2.circle(game_data, (int(nex_pos[0]), int(nex_pos[1])), 10, (0, 255, 0))
+
+        draw_dict = {
+            NEXUS: [15, (0, 255, 0)],
+            PYLON: [3, (20, 235, 0)],
+            PROBE: [1, (55, 200, 0)],
+
+            ASSIMILATOR: [2, (55, 200, 0)],  # probe==assimilator
+            GATEWAY: [3, (200, 100, 0)],
+            CYBERNETICSCORE: [3, (150, 150, 0)],
+            STARGATE: [5, (255, 0, 0)],
+            VOIDRAY: [3, (255, 100, 0)]
+        }
+        for unit_type in draw_dict:
+            for unit in self.units(unit_type).ready:
+                nex_pos = unit.position
+                cv2.circle(game_data, (int(nex_pos[0]), int(nex_pos[1])), draw_dict[unit_type][0], draw_dict[unit_type][1])
 
         flipped = cv2.flip(game_data, 0)
         resized = cv2.resize(flipped, dsize=None, fx=2, fy=2)
