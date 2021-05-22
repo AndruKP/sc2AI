@@ -3,9 +3,10 @@ import cv2
 import numpy as np
 
 import sc2
-from sc2 import run_game, maps, Race, Difficulty
+from sc2 import run_game, maps, Race, Difficulty, position
 from sc2.player import Bot, Computer
-from sc2.constants import NEXUS, PROBE, PYLON, ASSIMILATOR, GATEWAY, CYBERNETICSCORE, STALKER, STARGATE, VOIDRAY
+from sc2.constants import NEXUS, PROBE, PYLON, ASSIMILATOR, GATEWAY, CYBERNETICSCORE, STALKER, STARGATE, VOIDRAY, \
+    OBSERVER, ROBOTICSFACILITY
 
 
 class AndruBot(sc2.BotAI):
@@ -15,6 +16,7 @@ class AndruBot(sc2.BotAI):
 
     async def on_step(self, iteration):
         self.iteration = iteration
+        await self.scout()
         await self.distribute_workers()
         await self.build_workers()
         await self.build_pylons()
@@ -24,6 +26,39 @@ class AndruBot(sc2.BotAI):
         await self.build_offensive_force()
         await self.intel()
         await self.attack()
+
+    async def scout(self):
+        if len(self.units(OBSERVER)) > 0:
+            scout = self.units(OBSERVER)[0]
+            if scout.is_idle:
+                enemy_location = self.enemy_start_locations[0]
+                move_to = self.random_location_variance(enemy_location)
+                print(move_to)
+                await self.do(scout.move(move_to))
+
+        else:
+            for rf in self.units(ROBOTICSFACILITY).ready.noqueue:
+                if self.can_afford(OBSERVER) and self.supply_left > 0:
+                    await self.do(rf.train(OBSERVER))
+
+    def random_location_variance(self, enemy_start_location):
+        x = enemy_start_location[0]
+        y = enemy_start_location[1]
+
+        x += ((random.randrange(-20, 20)) / 100) * enemy_start_location[0]
+        y += ((random.randrange(-20, 20)) / 100) * enemy_start_location[1]
+
+        if x < 0:
+            x = 0
+        if y < 0:
+            y = 0
+        if x > self.game_info.map_size[0]:
+            x = self.game_info.map_size[0]
+        if y > self.game_info.map_size[1]:
+            y = self.game_info.map_size[1]
+
+        go_to = position.Point2(position.Pointlike((x, y)))
+        return go_to
 
     async def intel(self):
         game_data = np.zeros((self.game_info.map_size[1], self.game_info.map_size[0], 3), np.uint8)
@@ -42,7 +77,35 @@ class AndruBot(sc2.BotAI):
         for unit_type in draw_dict:
             for unit in self.units(unit_type).ready:
                 nex_pos = unit.position
-                cv2.circle(game_data, (int(nex_pos[0]), int(nex_pos[1])), draw_dict[unit_type][0], draw_dict[unit_type][1])
+                cv2.circle(game_data, (int(nex_pos[0]), int(nex_pos[1])), draw_dict[unit_type][0],
+                           draw_dict[unit_type][1])
+
+        main_base_names = ["nexus", "commandcenter", 'orbitalcommand', "planetaryfortress", "hatchery", "lair", "hive"]
+        for enemy_building in self.known_enemy_structures:
+            pos = enemy_building.position
+            if enemy_building.name.lower() not in main_base_names:
+                cv2.circle(game_data, (int(pos[0]), int(pos[1])), 5, (200, 50, 212), -1)
+        for enemy_building in self.known_enemy_structures:
+            pos = enemy_building.position
+            if enemy_building.name.lower() in main_base_names:
+                cv2.circle(game_data, (int(pos[0]), int(pos[1])), 15, (0, 0, 255), -1)
+
+        for enemy_unit in self.known_enemy_units:
+
+            if not enemy_unit.is_structure:
+                worker_names = ["probe",
+                                "scv",
+                                "drone"]
+                # if that unit is a PROBE, SCV, or DRONE... it's a worker
+                pos = enemy_unit.position
+                if enemy_unit.name.lower() in worker_names:
+                    cv2.circle(game_data, (int(pos[0]), int(pos[1])), 1, (55, 0, 155), -1)
+                else:
+                    cv2.circle(game_data, (int(pos[0]), int(pos[1])), 3, (50, 0, 215), -1)
+
+        for obs in self.units(OBSERVER).ready:
+            pos = obs.position
+            cv2.circle(game_data, (int(pos[0]), int(pos[1])), 1, (255, 255, 255), -1)
 
         flipped = cv2.flip(game_data, 0)
         resized = cv2.resize(flipped, dsize=None, fx=2, fy=2)
@@ -90,6 +153,11 @@ class AndruBot(sc2.BotAI):
             elif self.units(GATEWAY).amount < 1:
                 if self.can_afford(GATEWAY) and not self.already_pending(GATEWAY):
                     await self.build(GATEWAY, near=pylon)
+
+            if self.units(CYBERNETICSCORE).ready.exists:
+                if len(self.units(ROBOTICSFACILITY)) < 1:
+                    if self.can_afford(ROBOTICSFACILITY) and not self.already_pending(ROBOTICSFACILITY):
+                        await self.build(ROBOTICSFACILITY, near=pylon)
 
             if self.units(CYBERNETICSCORE).ready.exists:
                 if self.units(STARGATE).amount < self.time / 75:
